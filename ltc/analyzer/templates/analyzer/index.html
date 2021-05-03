@@ -1,0 +1,34 @@
+{% extends 'ltc/base.html' %}
+{% load staticfiles %}
+{% load analyzer_extras %}
+{% block content %}
+<hr/>
+<form class="form-inline" method="POST">
+    {% csrf_token %}
+    <div class="col-md-1">
+        <select name="project_id" id="analyzer-select-project" class="form-control form-control-sm analyzer-form-control">
+            <option disabled {% if not project_id %} selected {% endif %} value="Select project">Select project</option>
+            {% for project in projects %}
+                <option value="{{ project.id }}" {% ifequal project.id project_.id %} selected {% endifequal %} >{{ project.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% if tests %}
+    <div class="col-md-1">
+        <select name="test_id" id="analyzer-select-test" class="form-control form-control-sm analyzer-form-control">
+            <option disabled {% if not test_id %} selected {% endif %} value="Select test">Select test</option>
+            {% for test in tests %}
+                <option value="{{ test.id }}" {% ifequal test.id test_.id %} selected {% endifequal %} >{% if test.name %}{{ test.name }}{% else %}{{ test.project }} - {{ test.id }}{% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+</form>
+<hr/>
+{% if test_ %}
+    {% generate_test_report test_ %}
+{% endif %}
+{% endblock %}
+{% block script %}
+<script src="{% static 'js/analyzer/analyzer.js' %}"></script>
+{% endblock %}

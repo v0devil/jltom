@@ -23,7 +23,7 @@
             <tr>
 
                 <td>
-                    {{ row.project_name }}
+                    {{ row.name }}
                 </td>
                 <td>
                     <button id="schedule_button_{{ row.id }}" value="{{ row.id }}" class="btn btn-success schedule_btn btn-xs">Schedule test</button>
@@ -32,7 +32,7 @@
             {% endfor %}
             <tr>
                 <td>
-                    {{ row.project_name }}
+                    {{ row.name }}
                 </td>
                 <td>
                     <button id="create_project_btn" value="" type="button" class="btn btn-default btn-lg">

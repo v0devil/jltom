@@ -7,10 +7,11 @@ from django.http import JsonResponse
 from django.shortcuts import render
 
 # Create your views here.
-from ltc.administrator.models import JMeterProfile, SSHKey, User, Configuration
-from ltc.analyzer.models import Test
+from ltc.administrator.models import JMeterProfile, User, Configuration
+from ltc.controller.models import SSHKey
+from ltc.base.models import Test
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('django')
 
 
 def administrator_page(request):
@@ -176,7 +177,7 @@ def test_data_refresh(request):
                     build_parameters = []
                     display_name = "unknown"
                     description = ""
-                    start_time = 0
+                    started_at = 0
                     duration = 0
                     build_xml_path = os.path.join(root, "build.xml")
                     if os.path.isfile(build_xml_path):
@@ -212,7 +213,7 @@ def test_data_refresh(request):
                                 else:
                                     user_id = 0
                             elif params.tag == 'startTime':
-                                start_time = int(params.text)
+                                started_at = int(params.text)
                             elif params.tag == 'displayName':
                                 display_name = params.text
                             elif params.tag == 'duration':
@@ -224,8 +225,8 @@ def test_data_refresh(request):
                             logger.info(
                                 "Updating test, id: {0}".format(str(test.id)))
                             test.display_name = display_name
-                            test.start_time = start_time
-                            test.end_time = start_time + duration
+                            test.started_at = started_at
+                            test.end_time = started_at + duration
                             test.description = description
                             test.parameters = build_parameters
                             test.started_by_id = user_id

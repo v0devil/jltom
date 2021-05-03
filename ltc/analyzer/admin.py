@@ -1,11 +1,19 @@
 from django.contrib import admin
 
-# Register your models here.
-from ltc.analyzer.models import Test, Project
+from ltc.analyzer.models import (
+    ReportTemplate,
+    GraphiteVariable,
+    TestData,
+)
 
 
-class TestAdmin(admin.ModelAdmin):
-    search_fields = ('display_name',)
+class ReportVariableInline(admin.TabularInline):
+    model = GraphiteVariable
 
-admin.site.register(Test, TestAdmin)
-admin.site.register(Project)
+
+class CollectionAdmin(admin.ModelAdmin):
+    inlines = (ReportVariableInline,)
+
+
+admin.site.register(ReportTemplate, CollectionAdmin)
+admin.site.register(TestData)

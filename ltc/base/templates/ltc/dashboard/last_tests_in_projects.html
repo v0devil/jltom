@@ -1,0 +1,55 @@
+{% if last_tests_by_project %}
+<div class="table-responsive">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Test name</th>
+                <th>Success requests</th>
+                <th>Avg. response times</th>
+                <th>Result</th>
+            </tr>
+        </thead>
+        {% for row in last_tests_by_project %}
+            {% with test=row.test prev_test=row.prev_test test_data=row.test_data prev_test_data=row.prev_test_data %}
+            <tr>
+                <td>
+                    {{ test.project }}
+                </td>
+                <td>
+                    <b>
+                        {% if test.name %}
+                            {{ test.name }}
+                        {% else %}
+                            {{ test.project }} - {{ test.id }}
+                        {% endif %}
+                    </b>
+                </td>
+                <td>
+                    {% if row.success_requests > 98 %}
+                    <font color="green"><b>{{ row.success_requests|floatformat }} % </b></font>
+                    {% else  %}
+                    <font color="red"><b>{{ row.success_requests|floatformat }} % </b></font>
+                    {% endif %}
+                </td>
+                <td>
+                    {% get_percentage_rel prev_test_data.mean test_data.mean as mean_diff %}
+                    {% get_percentage_abs prev_test_data.mean test_data.mean as mean_diff_abs %}
+                    {{ test_data.mean|floatformat }} ms
+                    {% if mean_diff <= 0 %}
+                        (<span style="color:green">&#8595;</span> {{ mean_diff_abs }} %)
+                    {% elif mean_diff_abs > 0 %}
+                        (<span style="color:red">&#8593;</span> {{ mean_diff_abs }} %)
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge rounded-pill bg-{% if row.result == 'success' %}success{% elif row.result == 'warning' %}warning{% else %}danger{% endif %}">{{ row.result }}</span>
+                </td>
+            </tr>
+            {% endwith %}
+        {% endfor %}
+    </table>
+</div>
+{% else %}
+<b>No data</b>
+{% endif %}

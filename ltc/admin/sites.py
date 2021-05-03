@@ -52,7 +52,10 @@ class AdminSite(DjangoAdminSite):
         return update_wrapper(inner, view)
 
     def get_urls(self):
-        admin_urls = [url for url in super().get_urls()]
+        remove_urls = ['password_change_done']
+
+        admin_urls = [url for url in super().get_urls() if
+                      not hasattr(url, 'name') or url.name not in remove_urls]
 
         for url in admin_urls:
             if not hasattr(url, 'name'):

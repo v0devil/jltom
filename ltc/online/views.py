@@ -8,49 +8,12 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.generic import TemplateView
 
-from ltc.analyzer.models import Project
+from ltc.base.models import Project
 from ltc.controller.models import TestRunning, TestRunningData
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('django')
 
 # Create your views here.
-
-
-def tests_list(request):
-    '''
-    Returns list of running tests
-
-    :return: JsonResponse
-    '''
-
-    data = []
-
-    # Check if running test is still exists and update it`s info if necessary
-    for test_running in TestRunning.objects.all():
-        result_file_dest = test_running.result_file_dest
-        if not result_file_dest:
-            workspace = test_running.workspace
-            for root, dirs, files in os.walk(workspace):
-                for f in fnmatch.filter(files, '*.jtl'):
-                    result_file_dest = os.path.join(root, f)
-                    test_running.result_file_dest = result_file_dest
-                    test_running.save()
-                for f in fnmatch.filter(files, '*.data'):
-                    monitoring_file_dest = os.path.join(root, f)
-                    test_running.monitoring_file_dest = monitoring_file_dest
-                    test_running.save()
-
-    for test_running in TestRunning.objects.all():
-        data.append({
-            "id":
-            test_running.id,
-            "result_file_dest":
-            result_file_dest,
-            "project_name":
-            Project.objects.get(id=test_running.project_id).project_name,
-        })
-    return JsonResponse(data, safe=False)
-
 
 def get_test_running_aggregate(test_running_id):
     '''

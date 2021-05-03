@@ -1,0 +1,64 @@
+
+{% if highlights.warning|length > 0 %}
+<div class="card border-warning">
+    <div class="card-body">
+        <ul class="highlights">
+            {% for h in highlights.warning %}
+                {% if h.type == 'new_actions' %}
+                <li>
+                    <span class="badge badge-pill badge-warning">new action</span>
+                    <span class="badge badge-pill badge-secondary">{{ tests.1.display_name }}</span>
+                    <b>{{ h.action.url }}</b> was not executed.
+                </li>
+                {% elif h.type == 'absent_actions' %}
+                <li>
+                    <span class="badge badge-pill badge-warning">absent action</span>
+                    <span class="badge badge-pill badge-secondary">{{ tests.0.display_name }}</span>
+                    <b>{{ h.action.url }}</b> was not executed.
+                </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+{% if highlights.success|length > 0 %}
+<div class="card border-success">
+    <div class="card-body">
+        <ul class="highlights">
+            {% for h in highlights.success %}
+                {% if h.type == 'lower_response_times' %}
+                <li>
+                    <span class="badge badge-pill badge-success">response times</span>
+                    <b>{{ h.action.current_test.url }}</b> became faster on <b>{% get_percentage_abs h.action.current_test.mean h.action.other_test.mean %} %</b>.
+                </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+{% if highlights.critical|length > 0 %}
+<div class="card border-danger">
+        <div class="card-body">
+        <ul class="highlights">
+            {% for h in highlights.critical %}
+                {% if h.type == 'higher_response_times' %}
+                <li>
+                        <span class="badge badge-pill badge-danger">response times</span>
+                        <span class="badge badge-pill badge-secondary">{{ tests.0.display_name }}</span>
+                        <b>{{ h.action.current_test.url }}</b> became higher on <b>{% get_percentage_abs h.action.current_test.data.mean h.action.other_test.data.mean %} %</b>.
+                </li>
+                {% elif h.type == 'lower_count' %}
+                <li>
+                        <span class="badge badge-pill badge-danger">count</span>
+                        <span class="badge badge-pill badge-secondary">{{ tests.0.display_name }}</span>
+                        <b>{{ h.action.current_test.url }}</b> was executed <b>{% get_percentage_abs h.action.current_test.data.count h.action.other_test.data.count %} %</b> less.
+                </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+        </div>
+    </div>
+</div>
+{% endif %}

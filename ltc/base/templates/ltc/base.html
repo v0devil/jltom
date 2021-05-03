@@ -1,0 +1,51 @@
+{% load staticfiles %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Load Testing Center</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/billboard/billboard.min.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/billboard/themes/insight.min.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/ltc.css' %}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4" crossorigin="anonymous"></script>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="{% static 'js/billboard/billboard.min.js' %}"></script>
+    <script src="{% static 'js/tablesorter/jquery.tablesorter.min.js' %}"></script>
+    <script src="{% static 'js/tablesorter/jquery.tablesorter.widgets.min.js' %}"></script>
+    <script src="{% static 'js/ltc.js' %}"></script>
+</head>
+<body>
+<!-- As a heading -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <span class="navbar-brand mb-0 h1">Load Testing Center</span>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav">
+            {% url 'ltc.index' as index %}
+            {% url 'ltc.analyzer' as analyzer %}
+            <li class="nav-item{% if request.get_full_path == index %} active{% endif %}">
+                <a class="nav-link" href="{{ index }}">DASHBOARD</a>
+            </li>
+            <li class="nav-item{% if request.get_full_path == '/analyzer' %} active{% endif %}">
+                <a class="nav-link" href="/analyzer">ANALYZER</a>
+            </li>
+            <li class="nav-item{% if request.get_full_path == '/controller' %} active{% endif %}">
+                <a class="nav-link" href="/controller">CONTROLLER</a>
+            </li>
+            <li class="nav-item{% if request.get_full_path == '/admin' %} active{% endif %}">
+                <a class="nav-link" href="/admin">ADMIN</a>
+            </li>
+        </ul>
+
+    </div>
+</nav>
+<div class="container-fluid">
+    {% block content %}{% endblock %}
+</div>
+
+{% block script %}{% endblock %}
+</body>
+</html>

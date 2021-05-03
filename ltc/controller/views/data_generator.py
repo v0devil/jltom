@@ -17,12 +17,15 @@ from pandas import DataFrame
 from pylab import *
 
 from ltc.analyzer.models import (
-    Action, Project, Server, ServerMonitoringData,
-    Test, TestActionAggregateData, TestActionData,
-    TestAggregate, TestData, TestDataResolution
+    Action, Server, ServerMonitoringData,
+    TestActionAggregateData, TestActionData,
+    TestData, TestDataResolution
+)
+from ltc.base.models import (
+    Project, Test
 )
 from ltc.controller.models import TestRunning
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('django')
 
 
 def percentile(n):
@@ -89,7 +92,7 @@ def add_running_test(root):
     build_xml = ElementTree()
     build_parameters = []
     display_name = "unknown"
-    start_time = 0
+    started_at = 0
     duration = 0
     project_id = 0
     jmeter_results_path = os.path.join(root, "jmeter.jtl")
@@ -108,7 +111,7 @@ def add_running_test(root):
                     value = parameter.find('value')
                     build_parameters.append([name.text, value.text])
             elif params.tag == 'startTime':
-                start_time = int(params.text)
+                started_at = int(params.text)
             elif params.tag == 'duration':
                 duration = int(params.text)
             elif params.tag == 'displayName':
@@ -126,12 +129,12 @@ def add_running_test(root):
         monitoring_file_dest=monitoring_data,
         log_file_dest='',
         display_name=display_name,
-        start_time=start_time,
+        started_at=started_at,
         pid=0,
         jmeter_remote_instances=None,
         workspace=root,
         is_running=True,
-        end_time=start_time + duration, )
+        end_time=started_at + duration, )
     running_test.save()
     return running_test.id
 
@@ -353,18 +356,18 @@ def generate_data(t_id, mode=''):
     logger.info("Parse and generate test data: {}".format(t_id))
     test_running = TestRunning.objects.get(id=t_id)
     if not Test.objects.filter(path=test_running.build_path).exists():
-        end_time = test_running.start_time + 1
+        end_time = test_running.started_at + 1
         build_number = 0
         display_name = ''
         if test_running.duration:
-            end_time = test_running.start_time + test_running.duration
+            end_time = test_running.started_at + test_running.duration
         if test_running.build_number:
             build_number = test_running.build_number
         test = Test(
             project_id=test_running.project_id,
             path=test_running.build_path,
             display_name=test_running.display_name,
-            start_time=test_running.start_time,
+            started_at=test_running.started_at,
             end_time=end_time,
             build_number=build_number,
             show=True)

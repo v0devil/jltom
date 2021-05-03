@@ -3,24 +3,26 @@
     <thead>
         <tr>
             <th>Action</th>
-            {% for key in aggregate_table.0.data %} {% if key != "action_id" %}
-            <th> {{ key }} </th>
-            {% endif %} {% endfor %}
+            {% for key in aggregate_table.0.data %}
+                {% if key != "action_id" %}
+                    <th>{{ key }}</th>
+                {% endif %}
+            {% endfor %}
         </tr>
     </thead>
     {% for row in aggregate_table %}
     <tr>
         {% for k, v in row.items %}
-        {% if k == "url" %}
-        <td><b>{{ v }}</b></td>
+        {% if k == "action__name" %}
+            <td><b>{{ v }}</b></td>
         {% elif k == "data" %}
             {% for name, value in v.items %}
                 {% if name == "errors" %}
                     {% get_percentage value v.count as errors_percentage %}
                         {% if errors_percentage > 3 and errors_percentage < 10 %}
-        <td>  <font color="#ff9933"><b>{{ errors_percentage }} % </b></font>({{ value|floatformat }}) </td>
+                        <td><font color="#ff9933"><b>{{ errors_percentage }} % </b></font>({{ value|floatformat }}) </td>
                         {% elif errors_percentage >= 10 %}
-        <td>  <font color="red"><b>{{ errors_percentage }} % </b></font>({{ value|floatformat }}) </td>
+                        <td><font color="red"><b>{{ errors_percentage }} % </b></font>({{ value|floatformat }}) </td>
                         {% else %}
                         <td> {{ errors_percentage }} % ({{ value|floatformat }}) </td>
                         {% endif %}

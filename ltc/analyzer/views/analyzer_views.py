@@ -4,7 +4,8 @@ import logging
 import math
 import time
 from collections import OrderedDict
-
+from datetime import datetime, timedelta
+from django.contrib.auth.decorators import login_required
 import pandas as pd
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -16,17 +17,275 @@ from django.template.loader import render_to_string
 from django.views.generic import TemplateView
 from pylab import *
 from scipy import stats
-
+from django.views.decorators.http import require_POST
 from ltc.administrator.models import Configuration
-from ltc.analyzer.confluence import confluenceposter
-from ltc.analyzer.confluence.utils import generate_confluence_graph
-from ltc.analyzer.models import (Action, Project, Server, ServerMonitoringData,
-                             Test, TestActionAggregateData, TestActionData,
-                             TestData, TestDataResolution, TestError)
+from ltc.base.utils.confluence import confluenceposter
+from ltc.base.utils.confluence.helpers import generate_confluence_graph
+from ltc.analyzer.models import (
+    Action, Server, ServerMonitoringData,
+    TestActionAggregateData, TestActionData,
+    TestData, TestDataResolution, TestError
+)
+from ltc.base.models import (
+    Project,
+    Test,
+)
 from ltc.controller.views import *
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('django')
+
 dateconv = np.vectorize(datetime.datetime.fromtimestamp)
+
+
+@login_required
+def index(request):
+    context = {}
+    context['projects'] = Project.objects.distinct()
+    if request.method == 'POST':
+        project_id = request.POST.get('project_id', '')
+        test_id = request.POST.get('test_id', '')
+        if project_id:
+            context['project_'] = Project.objects.get(id=project_id)
+            context['tests'] = Test.objects.filter(
+                project_id=project_id
+            ).order_by(F('started_at').desc(nulls_last=True))
+        if test_id:
+            context['test_'] = Test.objects.get(id=test_id)
+    return render(request, 'analyzer/index.html', context)
+
+
+
+@require_POST
+def test_data(request):
+    response = {}
+    test_id = request.POST.get('test_id', '')
+    response['test_id'] = test_id
+    data = Test.objects.filter(id=test_id).prefetch_related(
+        'testdata_set',
+        'testactionaggregatedata_set',
+        'testactiondata_set',
+        'servermonitoringdata_set'
+    )
+    data = data.first()
+    response['name'] = data.name
+    test_action_aggregate_data = []
+    for d in data.testactionaggregatedata_set.all():
+        d_ = d.data
+        d_['action'] = d.action.name
+        test_action_aggregate_data.append(d_)
+    test_data = []
+    for d in data.testdata_set.all():
+        d_ = d.data
+        test_data.append(d_)
+
+    server_monitoring_data = {}
+    for d in data.servermonitoringdata_set.all():
+        d_ = d.data
+        server_monitoring_data.setdefault(
+            d.server.server_name.replace(".", "_"), []
+        ).append(d_)
+
+    prev_tests = Test.objects.filter(
+        started_at__lte=data.started_at,
+        project=data.project,
+    ).order_by(F('started_at').desc(nulls_last=True))
+    compare_data = []
+    for t in prev_tests:
+        if not t.get_test_metric('mean'):
+            continue
+        test_name = t.name
+        if not test_name:
+            test_name = f'{t.project.name} - {t.id}'
+        compare_data.append(
+            {
+                'test_name': test_name,
+                'mean': t.get_test_metric('mean')[0]['mean'],
+                'median': t.get_test_metric('median')[0]['median'],
+                'cpu_load': t.get_test_metric('cpu_load')
+            }
+        )
+    response['test_action_aggregate_data'] = test_action_aggregate_data
+    response['test_data'] = test_data
+    response['server_monitoring_data'] = server_monitoring_data
+    response['compare_data'] = compare_data
+    return JsonResponse(response)
+
+
+@require_POST
+def compare_highlights(request):
+    """
+    Show comparasion highlights for the test.
+
+    **Template:**
+
+    :template:`test_report/compare_highlights.html`
+    """
+    tests = []
+    test_ids = request.POST.getlist('test_ids[]')
+    if len(test_ids) >= 1:
+        test = Test.objects.get(id=test_ids[0])
+        tests.append(test)
+    if len(test_ids) < 2:
+        tests.append(test.prev_test())
+    elif len(test_ids) == 2:
+        tests.append(Test.objects.get(id=test_ids[1]))
+    highlights = {}
+    highlights['critical'] = []
+    highlights['warning'] = []
+    highlights['success'] = []
+    actions = {}
+    actions_data = {}
+    for test in tests:
+        actions[
+            test.name
+        ] = TestActionAggregateData.objects.annotate(
+            name=F('action__name')
+        ).filter(test=test).values('name', 'action_id')
+        actions_data[
+            test.name
+        ] = TestActionAggregateData.objects.annotate(
+            name=F('action__name')
+        ).filter(test=test).values('name', 'data')
+
+    highlights['warning'] = [
+        {'action': action, 'type': 'new_actions'}
+        for action in actions[tests[0].name]
+        if action not in actions[tests[1].name]
+    ]
+
+    highlights['warning'] = [
+        {'action': action, 'type': 'absent_actions'}
+        for action in actions[tests[1].name]
+        if action not in actions[tests[0].name]
+    ]
+
+    sp = int(Configuration.objects.get(
+        name='signifficant_actions_compare_percent'
+        ).value)
+
+    for a in actions_data[tests[1].name]:
+        action = {}
+        action['other_test'] = a
+        action_name = action['other_test']['name']
+        a_ = actions_data[
+            tests[0].name
+        ].filter(name=action_name)
+        if a_.first() is None:
+            continue
+        action['current_test'] = a_.first()
+        Xa = action['current_test']['data']['mean']
+        Xb = action['other_test']['data']['mean']
+        Sa = action['current_test']['data'].get('std', 0)
+        Sb = action['other_test']['data'].get('std', 0)
+        Na = action['current_test']['data']['count']
+        Nb = action['other_test']['data']['count']
+        # df = Na - 1 + Nb - 1
+        # Satterthwaite Formula for Degrees of Freedom
+        critical = []
+        if Xa > 10 and Xb > 10 and not Sa == 0 and not Sb == 0:
+            df = math.pow(
+                math.pow(Sa, 2) / Na + math.pow(Sb, 2) / Nb, 2) / (
+                    math.pow(math.pow(Sa, 2) / Na, 2) /
+                    (Na - 1) + math.pow(math.pow(Sb, 2) / Nb, 2) /
+                    (Nb - 1))
+            if df > 0:
+                t = stats.t.ppf(1 - 0.01, df)
+                Sab = math.sqrt(((Na - 1) * math.pow(Sa, 2) +
+                                    (Nb - 1) * math.pow(Sb, 2)) / df)
+                Texp = (math.fabs(Xa - Xb)) / (
+                    Sab * math.sqrt(1 / Na + 1 / Nb))
+                if Texp > t:
+                    diff_percent = abs(100 - 100 * Xa / Xb)
+                    if Xa > Xb:
+                        if diff_percent > sp:
+                            highlights['critical'].append({
+                                'action': action,
+                                'type': 'higher_response_times',
+                            })
+                    else:
+                        if diff_percent > sp:
+                            highlights['success'].append({
+                                'action': action,
+                                'type': 'lower_response_times',
+                            })
+                    if Na / 100 * Nb < 90:
+                        highlights['warning'].append({
+                            'action': action,
+                            'type': 'lower_count',
+                        })
+    return render(
+        request,
+        'analyzer/report/test_report/highlights.html', {
+            'highlights': highlights,
+            'tests': tests,
+        }
+    )
+
+def action_details(request, test_id, action_id):
+    """
+    Generate HTML page with detail data about test action
+
+    **Template:**
+
+    :template:`test_report/action_details.html`
+    """
+
+    action_aggregate_data = list(
+        TestActionAggregateData.objects.annotate(
+            test_name=F('test__name')).filter(
+                action_id=action_id, test_id__lte=test_id).values(
+                    'test_name', 'data').order_by('-test__started_at'))[:5]
+    action_data = []
+    for e in action_aggregate_data:
+        data = e['data']
+        mean = data['mean']
+        min = data['min']
+        max = data['max']
+        q3 = data['75%']
+        q2 = data['50%']
+        std = data['std']
+        if '25%' in data:
+            q1 = data['25%']
+        else:
+            # WTF lol
+            q1 = q2 - (q3 - q2)
+        IQR = q3 - q1
+        LW = q1 - 1.5 * IQR
+        if LW < 0:
+            LW = 0.1
+        UW = q3 + 1.5 * IQR
+        test_name = e['test_name']
+        action_data.append({
+            "q1": q1,
+            "q2": q2,
+            "q3": q3,
+            "IQR": IQR,
+            "LW": LW,
+            "UW": UW,
+            "mean": mean,
+            "min": min,
+            "max": max,
+            "std": std,
+            "test_name": test_name
+        })
+    test_started_at = TestActionData.objects. \
+        filter(test_id=test_id, data_resolution_id=1). \
+        aggregate(min_timestamp=Min(
+            RawSQL("((data->>%s)::timestamp)",
+                  ('timestamp',))))['min_timestamp']
+    test_errors = TestError.objects.annotate(
+        text=F('error__text'), code=F('error__code')).filter(
+            test_id=test_id, action_id=action_id).values(
+                'text', 'code', 'count')
+    return render(
+        request,
+        'analyzer/report/test_report/action_details.html', {
+            'test_id': test_id,
+            'action': Action.objects.get(id=action_id),
+            'action_data': action_data,
+            'test_started_at': test_started_at,
+            'test_errors': test_errors,
+        })
 
 
 class Round(Func):
@@ -74,14 +333,14 @@ def upload_test_result_file(request):
     project_id = int(request.POST.get('project_id', '0'))
     # Create new project
     if project_id == 0:
-        project = Project(project_name="New project", )
+        project = Project(name="New project", )
         project.save()
         project_id = project.id
     test = Test(
         project_id=project_id,
         display_name=test_name,
         show=True,
-        start_time=int(time.time() * 1000))
+        started_at=int(time.time() * 1000))
     test.save()
     test_id = test.id
     path = default_storage.save('test_result_data.csv',
@@ -103,52 +362,11 @@ def configure_page(request, project_id):
 
     project = Project.objects.get(id=project_id)
     tests_list = Test.objects.filter(
-        project_id=project_id).values().order_by('-start_time')
+        project_id=project_id).values().order_by('-started_at')
     return render(request, 'overall_configure_page.html', {
         'tests_list': tests_list,
         'project': project
     })
-
-
-def projects_list(request):
-    '''Return available projects list'''
-
-    project_list = list(
-        Project.objects.filter(show=True).values().order_by('project_name'))
-    return JsonResponse(project_list, safe=False)
-
-
-def data_resolutions_list(request):
-    '''Return data resolutions list'''
-    return JsonResponse(list(TestDataResolution.objects.values()), safe=False)
-
-
-def get_project_tests_list(project_id):
-    '''Return test`s list for some project'''
-
-    t = Test.objects.filter(project__id=project_id).values().\
-        order_by('-start_time')
-    return t
-
-
-def get_test_actions_list(test_id):
-    '''Return actions list for some test'''
-
-    t = TestActionData.objects.filter(
-        test_id=test_id, data_resolution_id=1).distinct('action_id').values(
-            'action_id', 'action__url')
-    return t
-
-
-def tests_list(request, project_id):
-    t = get_project_tests_list(project_id)
-    return JsonResponse(list(t), safe=False)
-
-
-def test_actions_list(request, test_id):
-    t = get_test_actions_list(test_id)
-    return JsonResponse(list(t), safe=False)
-
 
 def composite_data(request):
     '''
@@ -217,7 +435,7 @@ def get_test_for_project(project_id, n):
     Get first, second, N test for project with project_id
     '''
     t = list(Test.objects.filter(project__id=project_id)\
-        .order_by('-start_time').values())[n]
+        .order_by('-started_at').values())[n]
     return t
 
 
@@ -244,7 +462,7 @@ def project_history(request, project_id):
                           RawSQL("((data->>%s)::numeric)", ('count',))) /
                           Sum(RawSQL("((data->>%s)::numeric)", ('count',)))). \
         annotate(median=Sum(RawSQL("((data->>%s)::numeric)", ('median',))*RawSQL("((data->>%s)::numeric)", ('count',)))/Sum(RawSQL("((data->>%s)::numeric)", ('count',)))). \
-        order_by('test__start_time')
+        order_by('test__started_at')
     return JsonResponse(list(data), safe=False)
 
 
@@ -268,10 +486,10 @@ def prev_test_id(request, test_id):
 
     p = Project.objects.\
         filter(test__id=test_id)
-    start_time = Test.objects.filter(
-        id=test_id).values('start_time')[0]['start_time']
-    t = Test.objects.filter(start_time__lte=start_time, project=p).\
-        values('id').order_by('-start_time')
+    started_at = Test.objects.filter(
+        id=test_id).values('started_at')[0]['started_at']
+    t = Test.objects.filter(started_at__lte=started_at, project=p).\
+        values('id').order_by('-started_at')
     return JsonResponse([list(t)[1]], safe=False)
 
 
@@ -299,7 +517,7 @@ def composite(request, project_id):
     '''Generate html page with conposite graph'''
 
     tests_list = Test.objects.filter(project__id=project_id).values().\
-        order_by('-start_time')
+        order_by('-started_at')
     return render(request, 'composite.html', {'tests_list': tests_list})
 
 
@@ -313,7 +531,7 @@ def action_report(request, test_id, action_id):
         TestActionAggregateData.objects.annotate(
             test_name=F('test__display_name')).filter(
                 action_id=action_id, test_id__lte=test_id).values(
-                    'test_name', 'data').order_by('-test__start_time'))[:5]
+                    'test_name', 'data').order_by('-test__started_at'))[:5]
     action_data = []
     for e in action_aggregate_data:
         data = e['data']
@@ -347,7 +565,7 @@ def action_report(request, test_id, action_id):
             "std": std,
             "test_name": test_name
         })
-    test_start_time = TestActionData.objects. \
+    test_started_at = TestActionData.objects. \
         filter(test_id=test_id, data_resolution_id=1). \
         aggregate(min_timestamp=Min(
             RawSQL("((data->>%s)::timestamp)",
@@ -362,7 +580,7 @@ def action_report(request, test_id, action_id):
             'test_id': test_id,
             'action': Action.objects.get(id=action_id),
             'action_data': action_data,
-            'test_start_time': test_start_time,
+            'test_started_at': test_started_at,
             'test_errors': test_errors,
         })
 
@@ -454,21 +672,21 @@ def test_change(request, test_id):
 
 def get_compare_tests_server_monitoring_data(test_id,
                                              num_of_tests,
-                                             order='-test__start_time'):
+                                             order='-test__started_at'):
     '''Return cpu load data for N tests before the current one'''
 
     project = Test.objects.filter(id=test_id).values('project_id')
     project_id = project[0]['project_id']
-    start_time = Test.objects.filter(
-        id=test_id).values('start_time')[0]['start_time']
+    started_at = Test.objects.filter(
+        id=test_id).values('started_at')[0]['started_at']
     data = (ServerMonitoringData.objects.filter(
-        test__start_time__lte=start_time,
+        test__started_at__lte=started_at,
         test__project_id=project_id,
         test__show=True,
         data_resolution_id=1,
         source='default',
     ).values(
-        'test__display_name', 'server__server_name', 'test__start_time'
+        'test__display_name', 'server__server_name', 'test__started_at'
     ).annotate(
         cpu_load=RawSQL(
             "((data->>%s)::float)+((data->>%s)::float)+((data->>%s)::float)", (
@@ -476,7 +694,7 @@ def get_compare_tests_server_monitoring_data(test_id,
                 'CPU_iowait',
                 'CPU_system',
             ))).annotate(
-                cpu_load=Avg('cpu_load')).order_by('-test__start_time'))
+                cpu_load=Avg('cpu_load')).order_by('-test__started_at'))
     return data
 
 
@@ -491,8 +709,8 @@ def compare_tests_cpu(request, test_id, num_of_tests):
         if counter < 1:
             d['rank'] = current_rank
         else:
-            if int(d['test__start_time']) == int(
-                    data[counter - 1]['test__start_time']):
+            if int(d['test__started_at']) == int(
+                    data[counter - 1]['test__started_at']):
                 d['rank'] = current_rank
             else:
                 current_rank += 1
@@ -518,30 +736,30 @@ def compare_tests_cpu(request, test_id, num_of_tests):
 
 def get_compare_tests_aggregate_data(test_id,
                                      num_of_tests,
-                                     order='-test__start_time',
+                                     order='-test__started_at',
                                      source='default'):
     '''
     Compares given test with test_id against num_of_tests previous
     '''
     project = Test.objects.filter(id=test_id).values('project_id')
-    start_time = Test.objects.filter(
-        id=test_id).values('start_time')[0]['start_time']
+    started_at = Test.objects.filter(
+        id=test_id).values('started_at')[0]['started_at']
     project_id = project[0]['project_id']
     if source == 'default':
         data = TestData.objects. \
-                filter(test__start_time__lte=start_time,
+                filter(test__started_at__lte=started_at,
                        test__project_id=project_id, test__show=True,
                        source=source, data_resolution_id = 1).\
                 annotate(display_name=F('test__display_name')). \
-                annotate(start_time=F('test__start_time')). \
-                values('display_name', 'start_time'). \
+                annotate(started_at=F('test__started_at')). \
+                values('display_name', 'started_at'). \
                 annotate(average=Sum(RawSQL("((data->>%s)::numeric)", ('avg',))*RawSQL("((data->>%s)::numeric)", ('count',)))/Sum(RawSQL("((data->>%s)::numeric)", ('count',)))). \
                 annotate(median=Sum(RawSQL("((data->>%s)::numeric)", ('median',))*RawSQL("((data->>%s)::numeric)", ('count',)))/Sum(RawSQL("((data->>%s)::numeric)", ('count',)))). \
                 order_by(order)[:int(num_of_tests)]
     elif source == 'graphite':
         tests = Test.objects.filter(
-            start_time__lte=start_time, project_id=project_id,
-            show=True).values().order_by('-start_time')[:int(num_of_tests)]
+            started_at__lte=started_at, project_id=project_id,
+            show=True).values().order_by('-started_at')[:int(num_of_tests)]
         for t in tests:
             test_id = t['id']
             if not ServerMonitoringData.objects.filter(
@@ -551,12 +769,12 @@ def get_compare_tests_aggregate_data(test_id,
                     data_resolution_id=1).exists():
                 result = update_test_graphite_data(test_id)
         data = TestData.objects. \
-                filter(test__start_time__lte=start_time,
+                filter(test__started_at__lte=started_at,
                        test__project_id=project_id, test__show=True,
                        source=source, data_resolution_id = 1).\
                 annotate(display_name=F('test__display_name')). \
-                annotate(start_time=F('test__start_time')). \
-                values('display_name', 'start_time'). \
+                annotate(started_at=F('test__started_at')). \
+                values('display_name', 'started_at'). \
                 annotate(average=Avg(RawSQL("((data->>%s)::numeric)", ('avg',)))). \
                 annotate(median=Avg(RawSQL("((data->>%s)::numeric)", ('median',)))). \
                 order_by(order).order_by(order)[:int(num_of_tests)]
@@ -577,8 +795,8 @@ def compare_tests_avg(request, test_id):
             if counter < 1:
                 d['rank'] = current_rank
             else:
-                if int(d['start_time']) == int(
-                        data[counter - 1]['start_time']):
+                if int(d['started_at']) == int(
+                        data[counter - 1]['started_at']):
                     d['rank'] = current_rank
                 else:
                     current_rank += 1
@@ -593,26 +811,26 @@ def compare_tests_avg(request, test_id):
 
 def get_compare_tests_count(test_id,
                             num_of_tests,
-                            order='-test__start_time',
+                            order='-test__started_at',
                             source='default'):
     '''
     Compares given test with test_id against num_of_tests previous
     '''
     project = Test.objects.filter(id=test_id).values('project_id')
-    start_time = Test.objects.filter(
-        id=test_id).values('start_time')[0]['start_time']
+    started_at = Test.objects.filter(
+        id=test_id).values('started_at')[0]['started_at']
     project_id = project[0]['project_id']
     data = TestActionData.objects.filter(
-                test__start_time__lte=start_time,
+                test__started_at__lte=started_at,
                 test__project_id=project_id,
                 test__show=True,
                 data_resolution_id=1
             ).annotate(
                 display_name=F('test__display_name')
             ).annotate(
-                start_time=F('test__start_time')
+                started_at=F('test__started_at')
             ).values(
-                'display_name', 'start_time'
+                'display_name', 'started_at'
             ).annotate(
                 count=Sum(RawSQL("((data->>%s)::numeric)", ('count',)))
             ).annotate(
@@ -636,8 +854,8 @@ def compare_tests_count(request, test_id):
             if counter < 1:
                 d['rank'] = current_rank
             else:
-                if int(d['start_time']) == int(
-                        data[counter - 1]['start_time']):
+                if int(d['started_at']) == int(
+                        data[counter - 1]['started_at']):
                     d['rank'] = current_rank
                 else:
                     current_rank += 1
@@ -1066,7 +1284,7 @@ def dashboard_compare_tests_list(tests_list):
         project = Project.objects.get(id=project_id)
 
         project_tests = Test.objects.filter(
-            project=project, id__lte=test_id).order_by('-start_time')
+            project=project, id__lte=test_id).order_by('-started_at')
 
         if project_tests.count() > 1:
             prev_test_id = project_tests[1].id
@@ -1106,13 +1324,13 @@ def dashboard_compare_tests_list(tests_list):
             result = 'danger'
         tests.append({
             'project_name':
-            t['project__project_name'],
-            'display_name':
-            t['display_name'],
-            'parameters':
-            t['parameters'],
-            'start_time':
-            t['start_time'],
+            t['project__name'],
+            'name':
+            t['name'],
+            'vars':
+            t['vars'],
+            'started_at':
+            t['started_at'],
             'success_requests':
             success_requests,
             'test_avg_response_times':
@@ -1121,7 +1339,6 @@ def dashboard_compare_tests_list(tests_list):
             prev_test_data['overall_avg'],
             'result':
             result,
-            'prefix': project.confluence_page
         })
     return tests
 
@@ -1135,23 +1352,27 @@ def dashboard(request):
     projects_list = []
     project_ids = []
     # Only tests executed in last 30 days
-    tests = Test.objects.filter(start_time__gt=int(
-                    time.time() * 1000) - 1000 * 1 * 60 * 60 * 24 * 30
-                ).values('project_id').annotate(
-                    latest_time=Max('start_time')
-                )
+    tests = Test.objects.filter(
+        started_at__gt=datetime.datetime.now()-timedelta(days=30)
+    ).values('project_id').annotate(
+        latest_time=Max('started_at')
+    )
     for test in tests:
         project_id = test['project_id']
-        r = Test.objects.filter(project_id=project_id,
-                                start_time=test['latest_time']).\
-            values('project__project_name', 'display_name', 'id',
-                    'project_id', 'parameters', 'start_time')
+        r = Test.objects.filter(
+            project_id=project_id,
+            started_at=test['latest_time']
+        ).values(
+            'project__name', 'name', 'id',
+            'project_id', 'vars', 'started_at'
+        )
         last_tests_by_project.append(list(r)[0])
         projects_list.append(Project.objects.get(id=project_id))
         project_ids.append(project_id)
-    last_tests = Test.objects.filter(project__show=True).values(
-        'project__project_name', 'project_id', 'display_name', 'id',
-        'parameters', 'start_time').order_by('-start_time')[:10]
+    last_tests = Test.objects.values(
+        'project__name', 'project_id', 'name', 'id',
+        'vars', 'started_at'
+    ).order_by('-started_at')[:10]
     tests = dashboard_compare_tests_list(last_tests)
     tests_by_project = dashboard_compare_tests_list(last_tests_by_project)
     return render(
@@ -1195,16 +1416,16 @@ def confluence_project_report(project_id):
     """
     last_test = get_test_for_project(project_id, 0)
     data = get_compare_tests_aggregate_data(
-        last_test['id'], 10, order='-start_time')
+        last_test['id'], 10, order='-started_at')
     agg_response_times_graph = generate_confluence_graph(project, list(data))
     last_tests = Test.objects.filter(project_id=project_id).values(
-        'project__project_name', 'project_id', 'display_name', 'id',
-        'parameters', 'start_time').order_by('-start_time')[:10]
+        'project__name', 'project_id', 'display_name', 'id',
+        'parameters', 'started_at').order_by('-started_at')[:10]
     tests = dashboard_compare_tests_list(last_tests)
     last_tests_table_html = render_to_string(
         'confluence/last_tests_table.html', {'last_tests': tests})
 
-    content = content.format(project.project_name, agg_response_times_graph)
+    content = content.format(project.name, agg_response_times_graph)
     content += last_tests_table_html
     return content
 
@@ -1224,7 +1445,7 @@ def generate_confluence_project_report(request, project_id):
     target_page = project.confluence_page
 
     if not target_page:
-        target_page = '{0} Load Testing Reports'.format(project.project_name)
+        target_page = '{0} Load Testing Reports'.format(project.name)
 
     target_url = '{}/display/{}/{}'.format(wiki_url, space, target_page)
 

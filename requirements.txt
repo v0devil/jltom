@@ -8,3 +8,4 @@ matplotlib
 scipy
 psycopg2-binary
 djangorestframework
+git+https://github.com/innogames/serveradmin.git

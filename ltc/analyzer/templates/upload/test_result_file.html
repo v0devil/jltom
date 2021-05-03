@@ -45,7 +45,7 @@
             <label for="select_project">Select project:</label>
             <select name="project_id" id="select_project" class="selectpicker">
               {% for project in projects %}
-              <option value="{{ project.id }}">{{ project.project_name }}</option>
+              <option value="{{ project.id }}">{{ project.name }}</option>
               {% endfor %}
               <option value="0">Create new project</option>
             </select>

@@ -49,7 +49,7 @@
         <h4>
             <img src="{% static 'images/innogames_logo.png' %}" alt="logo" width="25" height="18" />
             <font color="#37742f" face="calibri">
-                    <a href="https://github.com/innogames/JMeter-Control-Center"><b>Load Testing Center</b></a>
+                <a href="https://github.com/innogames/JMeter-Control-Center"><b>Load Testing Center</b></a>
             </font>
         </h4>
     </div>
@@ -75,22 +75,29 @@
                 <a href='#administrator'>
                     <span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> ADMINISTRATOR</a>
             </li>
-            <button id="test_result_upload_btn" class="btn btn-success btn-small" onclick="return popitup('analyzer/upload/test_result_file/')">
-                <span class="glyphicon glyphicon-upload" aria-hidden="true"></span> Upload file with test results</button>
+            <button id="test_result_upload_btn" class="btn btn-success btn-small"
+                onclick="return popitup('analyzer/upload/test_result_file/')">
+                <span class="glyphicon glyphicon-upload" aria-hidden="true"></span> Upload file with test
+                results</button>
             <div class="greeting"></div>
+            <a href='/admin'>
+                <span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Django admin</a>
+            <a href="{% url 'logout' %}">
+                Log out
+            </a>
         </ul>
         <div id="dashboard">
             <div id="dashboard_page"></div>
         </div>
         <div id="analyzer">
-            <hr/>
+            <hr />
             <select name="analyzer-select-project" id="analyzer-select-project" class="selectpicker">
                 <option disabled selected value="Select project">Select project</option>
                 {% for project in projects %}
-                    <option value="{{ project.id }}">{{ project.project_name }}</option>
+                <option value="{{ project.id }}">{{ project.project_name }}</option>
                 {% endfor %}
             </select>
-            <hr/>
+            <hr />
             <article id="analyzer_tabs" class="tabs">
                 <ul>
 
@@ -111,11 +118,11 @@
             </article>
         </div>
         <div id="online">
-            <hr/>
+            <hr />
             <select name="select_running_test" id="select_running_test" class="selectpicker">
                 <option disabled selected>Select running test</option>
             </select>
-            <hr/>
+            <hr />
             <div id="online_page"></div>
         </div>
         <div id="controller">
@@ -177,7 +184,6 @@
             });
             $(window).trigger('resize');
         });
-
     </script>
 </body>
 
