@@ -1,0 +1,40 @@
+<hr/>
+<h4 class="page-header">Overview <small>for the current test</small></h4>
+<hr/>
+<div class="row">
+    <div class="col-3">
+        <div class="card border-light">
+            <div class="card-header">Requests statistics:</div>
+            <div class="card-body">
+                <div class="chart" id="errors-graph"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-3">
+        <div class="card border-light">
+            <div class="card-header">Top failed actions:</div>
+            <div class="card-body">
+                <ul class="list-group">
+                    <li class="list-group-item">
+                        {% for e in test.top_errors %}
+                        <span class="badge alert-danger">{{ e.errors }}</span>
+                        <div style="word-wrap:break-word;">
+                            <b>
+                                <a href="">{{ e.name }}</a>
+                            </b>
+                        </div>
+                        {% endfor %}
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-6">
+        <div class="card border-light">
+                <div class="card-header">Top slowest actions:</div>
+                <div class="card-body">
+                    <div class="chart" id="top-mean-graph"></div>
+                </div>
+        </div>
+    </div>
+</div>

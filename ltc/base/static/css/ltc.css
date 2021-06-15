@@ -1,0 +1,9 @@
+ul.highlights {
+    list-style-type: none;
+}
+
+a {
+    font-weight: 600;
+    color: black;
+    font-size: 1rem;
+}

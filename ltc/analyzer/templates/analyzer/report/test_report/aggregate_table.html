@@ -1,0 +1,44 @@
+{% load static %}
+<hr/>
+<h4 class="page-header">Aggregate table</h4>
+<hr/>
+<div class="panel panel-default">
+    <div class="panel-body">
+        <table id="aggregate-table" class="tablesorter">
+            <thead>
+                <tr>
+                    <th>Action</th>
+                    {% for key in aggregate_table.0.data %} {% if key != "action_id" %}
+                    <th> {{ key }} </th>
+                    {% endif %} {% endfor %}
+                </tr>
+            </thead>
+            {% for row in aggregate_table %}
+            <tr>
+                {% url 'action_details' test.id row.action_id as a_url %}
+                <td><b><a href="{{ a_url }}"
+                            onclick="return popitup('{{ a_url }}')">{{ row.name }}</a></b>
+                </td>
+                {% for name, value in row.data.items %}
+                {% if name == "errors" %}
+                {% get_percentage value row.data.count as errors_percentage %}
+                {% if errors_percentage > 3 and errors_percentage < 10 %}
+                <td>
+                    <font color="#ff9933"><b>{{ errors_percentage }} % </b></font>({{ value|floatformat }})
+                </td>
+                {% elif errors_percentage >= 10 %}
+                <td>
+                    <font color="red"><b>{{ errors_percentage }} % </b></font>({{ value|floatformat }})
+                </td>
+                {% else %}
+                <td> {{ errors_percentage }} % ({{ value|floatformat }}) </td>
+                {% endif %}
+                {% else %}
+                <td> {{ value|floatformat }} </td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>

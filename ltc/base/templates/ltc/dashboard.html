@@ -1,0 +1,46 @@
+{% extends 'ltc/base.html' %}
+{% load staticfiles %}
+{% load static %}
+{% block content %}
+<hr/>
+<h4 class="page-header">Dashboard</h4>
+<hr/>
+<div class="row">
+    <div class="col-9">
+        <ul class="nav nav-tabs" id="dashboard-tabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" id="last-tests-tab" data-bs-toggle="tab" data-bs-target="#last-tests" type="button"  role="tab" aria-controls="overview" aria-selected="true">Last tests</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="last-tests-in-projects-tab" data-bs-toggle="tab" data-bs-target="#last-tests-in-projects" type="button"  role="tab" aria-controls="compare" aria-selected="false">Last tests in projects</a>
+                </li>
+            </ul>
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="last-tests" role="tabpanel" aria-labelledby="last-tests-tab">
+                    {% include "ltc/dashboard/last_tests.html" with last_tests=last_tests %}
+                </div>
+                <div class="tab-pane fade" id="last-tests-in-projects" role="tabpanel" aria-labelledby="last-tests-in-projects-tab">
+                    {% include "ltc/dashboard/last_tests_in_projects.html" with last_tests_by_project=last_tests_by_project %}
+                </div>
+            </div>
+        </ul>
+    </div>
+    <div class="col-3">
+        <div class="card border-light">
+            <div class="card-header">Active tests:</div>
+            <div class="card-body">
+                <div id="active-tests"></div>
+            </div>
+        </div>
+        <div class="card border-light">
+            <div class="card-header">Active load generators:</div>
+            <div class="card-body">
+                <div id="load-generators"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block script %}
+<script src="{% static 'js/dashboard/dashboard.js' %}"></script>
+{% endblock %}

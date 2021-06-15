@@ -14,7 +14,7 @@ import select
 
 import shutil
 
-from ltc.administrator.models import JMeterProfile, SSHKey
+from ltc.administrator.models import JMeterProfile
 
 if _platform == "linux" or _platform == "linux2":
     import resource
@@ -22,15 +22,16 @@ if _platform == "linux" or _platform == "linux2":
 import paramiko
 import tempfile
 from ltc.controller.graphite import graphiteclient
-from ltc.analyzer.models import Project, Test, Server, ServerMonitoringData, TestData
+from ltc.analyzer.models import Server, ServerMonitoringData, TestData
+from ltc.base.models import Project, Test
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
 
-from ltc.controller.models import Proxy, TestRunning, LoadGeneratorServer, JMeterTestPlanParameter, ScriptParameter, ProjectGraphiteSettings
+from ltc.controller.models import JmeterServer, LoadGenerator, SSHKey, Proxy, TestRunning, LoadGeneratorServer, JMeterTestPlanParameter, ScriptParameter, ProjectGraphiteSettings
 from django.db.models import Sum, Avg, Max, Min, FloatField, IntegerField
 from ltc.administrator.models import Configuration
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('django')
 
 
 def setlimits():
@@ -81,6 +82,20 @@ def stop_proxy(request, proxy_id):
             "proxy": list(proxy)[0]
         }]
     return JsonResponse(response, safe=False)
+
+
+def get_load_generator_data(request, load_generator_id):
+    load_generator = LoadGenerator.objects.get(id=load_generator_id)
+    jmeter_instances = JmeterServer.objects.annotate(
+        project_name=F('project__project_name')).filter(
+            load_generator_id=load_generator_id).values(
+                'pid', 'port', 'jmeter_dir', 'project_name', 'threads_number',
+                'java_args')
+    return render(request, 'load_generator_page.html', {
+        'load_generator': load_generator,
+        'jmeter_instances': jmeter_instances,
+    })
+
 
 
 def start_proxy(request, proxy_id):
@@ -168,17 +183,6 @@ def jri_list(request, project_id):
     if jris is None:
         jris = []
     return render(request, 'jri.html', {'jris': jris, 'project': project})
-
-
-def get_running_tests(request):
-    running_tests_data = list(
-        TestRunning.objects.annotate(project_name=F('project__project_name'))
-        .annotate(current_time=Value(
-            time.time() * 1000, output_field=IntegerField())).values(
-                'project_name', 'id', 'start_time', 'current_time',
-                'jmeter_remote_instances', 'duration'))
-    return JsonResponse(running_tests_data, safe=False)
-
 
 def jmeter_param_delete(request, project_id, param_id):
     project = Project.objects.values().get(id=project_id)
@@ -496,7 +500,6 @@ def add_jri(request, project_id):
 
 def controller_page(request):
     projects_list = list(Project.objects.values())
-    running_tests_list = TestRunning.objects.values()
     proxies_list = Proxy.objects.values()
     for proxy in proxies_list:
         if proxy["pid"] != 0:
@@ -508,7 +511,7 @@ def controller_page(request):
     proxies_list = Proxy.objects.values()
     return render(request, 'controller_page.html', {
         'projects_list': projects_list,
-        'running_tests_list': running_tests_list,
+        'running_tests_list': [],
         'proxies_list': list(proxies_list)
     })
 
@@ -597,7 +600,7 @@ def start_test(request, project_id):
     response = []
     project = Project.objects.get(id=project_id)
     pid = 0
-    start_time = 0
+    started_at = 0
     display_name = ""
     test_id = 0
     if request.method == 'POST':
@@ -744,10 +747,10 @@ def start_test(request, project_id):
                 executable=java_exec,
             )
         pid = jmeter_process.pid
-        start_time = int(time.time() * 1000)
+        started_at = int(time.time() * 1000)
         t = TestRunning(
             pid=pid,
-            start_time=start_time,
+            started_at=started_at,
             result_file_dest=result_file_destination,
             monitoring_file_dest="",
             display_name=display_name,
@@ -930,8 +933,8 @@ def update_test_graphite_data(test_id):
         test = Test.objects.get(id=test_id)
         world_id = ""
 
-        start_time = datetime.datetime.fromtimestamp(
-            test.start_time / 1000 + 3600).strftime("%H:%M_%Y%m%d")
+        started_at = datetime.datetime.fromtimestamp(
+            test.started_at / 1000 + 3600).strftime("%H:%M_%Y%m%d")
         end_time = datetime.datetime.fromtimestamp(
             test.end_time / 1000 + 3600).strftime("%H:%M_%Y%m%d")
 
@@ -957,7 +960,7 @@ def update_test_graphite_data(test_id):
                         query = 'aliasSub(stacked(asPercent(nonNegativeDerivative(groupByNode(servers.{' + server_name + '}.system.cpu.{user,system,iowait,irq,softirq,nice,steal},4,"sumSeries")),nonNegativeDerivative(sum(servers.' + server_name + '.system.cpu.{idle,time})))),".*Derivative\((.*)\),non.*","CPU_\\1")'
                         results = gc.query(
                             query,
-                            start_time,
+                            started_at,
                             end_time, )
                         data = {}
                         for res in results:
@@ -1021,14 +1024,14 @@ def update_test_graphite_data(test_id):
                 project_id=test.project_id, name='gentime_avg_request').value
             results = gc.query(
                 query,
-                start_time,
+                started_at,
                 end_time, )
             # Ugly bullshit
             query = ProjectGraphiteSettings.objects.get(
                 project_id=test.project_id, name='gentime_median_request').value
             results_median = gc.query(
                 query,
-                start_time,
+                started_at,
                 end_time, )
             results.append(results_median[0])
 
@@ -1037,7 +1040,7 @@ def update_test_graphite_data(test_id):
                 name='gentime_req_per_sec_request').value
             results_rps = gc.query(
                 query,
-                start_time,
+                started_at,
                 end_time, )
             results.append(results_rps[0])
             data = {}
@@ -1076,28 +1079,28 @@ def update_gentime_graphite_metric(test_id):
         if 'WORLD_ID' in parameter:
             world_id = parameter['WORLD_ID']
 
-    start_time = datetime.datetime.fromtimestamp(
-        test.start_time / 1000).strftime("%H:%M_%Y%m%d")
+    started_at = datetime.datetime.fromtimestamp(
+        test.started_at / 1000).strftime("%H:%M_%Y%m%d")
     end_time = datetime.datetime.fromtimestamp(
         test.end_time / 1000).strftime("%H:%M_%Y%m%d")
 
     query = 'alias(avg(servers.' + world_id + 'w*_foe' + '.software.gentime.TimeSiteAvg),"avg")'
     results = gc.query(
         query,
-        start_time,
+        started_at,
         end_time, )
     # Ugly bullshit
     query = 'alias(avg(servers.' + world_id + 'w*_foe' + '.software.gentime.TimeSiteMed),"median")'
     results_median = gc.query(
         query,
-        start_time,
+        started_at,
         end_time, )
     results.append(results_median[0])
 
     query = 'alias(sum(servers.' + world_id + 'w*_foe' + '.software.gentime.SiteReqPerSec),"rps")'
     results_rps = gc.query(
         query,
-        start_time,
+        started_at,
         end_time, )
     results.append(results_rps[0])
     data = {}

@@ -9,7 +9,8 @@
         <tr>
             <th>Test`s start time (UTC)</th>
             <th>Test name</th>
-            <th>Virtual Users #</th>
+            <th>CCU1</th>
+            <th>DAU</th>
             <th>Success requests</th>
             <th>Avg. response times</th>
             <th>Result</th>
@@ -17,18 +18,15 @@
     </thead>
     {% for row in last_tests %}
     <tr>
-            <td>{% print_timestamp row.start_time %}</td>
+            <td>{{ row.test.started_at }}</td>
             <td>
-                <strong><ac:link><ri:page ri:content-title="{{ row.prefix }} - {{ row.display_name }}"/><ac:plain-text-link-body><![CDATA[{{ row.display_name }}]]></ac:plain-text-link-body></ac:link></strong>
+                <strong><ac:link><ri:page ri:content-title="{{ row.prefix }} - {{ row.test.id }}"/><ac:plain-text-link-body><![CDATA[{{ row.test.name }}]]></ac:plain-text-link-body></ac:link></strong>
             </td>
             <td>
-                                        {% for parameter in row.parameters %}
-                                        {% for name, value in parameter.items %}
-                                            {% if name == "THREAD_COUNT" %}
-                                            {{ value }}
-                                            {% endif %}
-                                        {% endfor %}
-                                        {% endfor %}
+                ${max_ccu:{{ row.test.id }}}
+            </td>
+            <td>
+                TBD
             </td>
             <td>
                     {% if row.success_requests > 98 %}

@@ -2,7 +2,6 @@ from django.conf.urls import url
 from . import views
 
 urlpatterns = [
-    url(r'^tests_list', views.tests_list),
     url(r'^(?P<test_running_id>\d+)/update/', views.update),
     url(r'^(?P<test_running_id>\d+)/rtot/', views.online_test_rtot),
     url(r'^(?P<test_running_id>\d+)/success_rate/',

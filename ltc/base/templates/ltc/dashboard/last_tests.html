@@ -1,0 +1,67 @@
+{% if last_tests %}
+<div class="table-responsive">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Test name</th>
+                <th>Virtual Users #</th>
+                <th>Duration</th>
+                <th>Success requests</th>
+                <th>Mean response times</th>
+                <th>Result</th>
+            </tr>
+        </thead>
+        {% for row in last_tests %}
+            {% with test=row.test prev_test=row.prev_test test_data=row.test_data prev_test_data=row.prev_test_data %}
+                <tr>
+                    <td>
+                        {{ row.test.project }}
+                    </td>
+                    <td>
+                        <b>
+                            <a href="" onclick="testReport({{ test.id }})">
+                            {% if test.name %}
+                                {{ test.name }}
+                            {% else %}
+                                {{ test.project }} - {{ test.id }}
+                            {% endif %}
+                            </a>
+                        </b>
+                    </td>
+                    <td>
+                        {{ test.threads }}
+                    </td>
+                    <td>
+                        {{ test.duration }}
+                    </td>
+                    <td>
+                        {% if row.success_requests > 98 %}
+                            <b style="color:green">{{ row.success_requests|floatformat }} % </b>
+                        {% elif row.success_requests <= 98 and row.success_requests > 95  %}
+                            <b style="color:orange">{{ row.success_requests|floatformat }} % </b>
+                        {% else %}
+                            <b style="color:red">{{ row.success_requests|floatformat }} % </b>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% get_percentage_rel prev_test_data.mean test_data.mean as mean_diff %}
+                        {% get_percentage_abs prev_test_data.mean test_data.mean as mean_diff_abs %}
+                        {{ test_data.mean|floatformat }} ms
+                        {% if mean_diff <= 0 %}
+                            (<span style="color:green">&#8595;</span> {{ mean_diff_abs }} %)
+                        {% elif mean_diff_abs > 0 %}
+                            (<span style="color:red">&#8593;</span> {{ mean_diff_abs }} %)
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge rounded-pill bg-{% if row.result == 'success' %}success{% elif row.result == 'warning' %}warning{% else %}danger{% endif %}">{{ row.result }}</span>
+                    </td>
+                </tr>
+            {% endwith %}
+        {% endfor %}
+    </table>
+</div>
+{% else %}
+<b>No data</b>
+{% endif %}

@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from controller.models import TestRunning
 from controller.views import generate_data
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('django')
 
 class Command(BaseCommand):
     def handle(self, *args, **options):

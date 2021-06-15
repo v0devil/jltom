@@ -4,10 +4,10 @@ import paramiko
 from django.core.management.base import BaseCommand
 from django.db.models.expressions import F
 
-from administrator.models import SSHKey
-from controller.models import (JmeterInstance, JmeterInstanceStatistic,
+from ltc.controller.models import SSHKey
+from ltc.controller.models import (JmeterInstance, JmeterInstanceStatistic,
                                TestRunning)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('django')
 
 
 class Command(BaseCommand):
@@ -29,12 +29,12 @@ class Command(BaseCommand):
             # Estimate number of threads at this moment
             test_running = TestRunning.objects.get(id=test_running_id)
             test_rampup = float(test_running.rampup) * 1000
-            test_start_time = float(test_running.start_time)
+            test_started_at = float(test_running.started_at)
             current_time = float(time.time() * 1000)
-            if (test_start_time + test_rampup) > current_time:
+            if (test_started_at + test_rampup) > current_time:
                 threads_number = int(
                     threads_number *
-                    ((current_time - test_start_time) / test_rampup))
+                    ((current_time - test_started_at) / test_rampup))
 
             logger.info("threads_number: {};".format(threads_number))
             ssh_key = SSHKey.objects.get(default=True).path

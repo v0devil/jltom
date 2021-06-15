@@ -168,7 +168,7 @@ for root, dirs, files in os.walk(builds_dir):
                 build_parameters = []
                 display_name = "unknown"
                 description = ""
-                start_time = 0
+                started_at = 0
                 duration = 0
                 monitoring_data = os.path.join(root, "monitoring.data")
                 errors_data = os.path.join(root, "errors")
@@ -212,7 +212,7 @@ for root, dirs, files in os.walk(builds_dir):
                                 else:
                                     user_id = 1
                         elif params.tag == 'startTime':
-                            start_time = int(params.text)
+                            started_at = int(params.text)
                         elif params.tag == 'displayName':
                             display_name = params.text
                         elif params.tag == 'duration':
@@ -241,8 +241,8 @@ for root, dirs, files in os.walk(builds_dir):
                         logger.info("Was found new test data, adding.")
                         build_number = int(
                             re.search('/builds/(\d+)', root).group(1))
-                        end_time = start_time + duration
-                        if start_time == end_time:
+                        end_time = started_at + duration
+                        if started_at == end_time:
                             end_time = int(time.time() * 1000)
                         stm = test.insert().values(
                             path=root,
@@ -250,7 +250,7 @@ for root, dirs, files in os.walk(builds_dir):
                             description=description,
                             parameters=build_parameters,
                             project_id=project_id,
-                            start_time=start_time,
+                            started_at=started_at,
                             end_time=end_time,
                             build_number=build_number,
                             started_by_id=user_id,

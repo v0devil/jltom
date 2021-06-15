@@ -35,7 +35,7 @@
                                 <tr>
 
                                     <td>
-                                        {{ row.project_name }}
+                                        {{ row.name }}
                                     </td>
                                     <td>
                                         <b><a href="" onclick="testReport({{ row.id }})">{{  row.display_name }}</a></b>
@@ -105,7 +105,7 @@
                                 {% for row in last_tests_by_project %}
                                 <tr>
                                     <td>
-                                        {{ row.project_name }}
+                                        {{ row.name }}
                                     </td>
                                     <td>
                                         <b><a href="" onclick="testReport({{ row.id }})">{{  row.display_name }}</a></b>
@@ -148,7 +148,7 @@
                 <span class="pull-right clickable"><i class="glyphicon glyphicon-minus"></i></span>
             </div>
             <div class="panel-body">
-                <div id="running_tests_list"></div>
+                <div id="active_tests"></div>
             </div>
         </div>
         <div class="panel panel-default">
@@ -158,7 +158,7 @@
                 <span class="pull-right clickable"><i class="glyphicon glyphicon-minus"></i></span>
             </div>
             <div class="panel-body">
-                <div id="load_generators_list"></div>
+                <div id="loadgenerators"></div>
             </div>
         </div>
     </div>

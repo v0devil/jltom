@@ -16,22 +16,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'ltc.base',
     'ltc.analyzer',
     'ltc.online',
     'ltc.controller',
-    'ltc.web',
     'ltc.administrator',
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 
 ROOT_URLCONF = 'ltc.urls'
 
@@ -98,78 +97,52 @@ USE_TZ = True
 PROJECT_DIR = os.path.dirname(__file__)
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
-STATIC_ROOT = os.path.join(PROJECT_DIR, 'static')
+STATIC_ROOT = os.path.join(BASE_DIR, '_static')
 STATIC_URL = '/static/'
-STATICFILES_DIRS = (os.path.join(PROJECT_DIR, 'web', 'static'), )
-
+# Additional locations of static files
+STATICFILES_DIRS = (os.path.join(PROJECT_DIR, 'base', 'static'), )
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'filters': {
-        'require_debug_false': {
-            '()': 'django.utils.log.RequireDebugFalse'
-        },
-        'require_debug_true': {
-            '()': 'django.utils.log.RequireDebugTrue'
-        }
-    },
     'formatters': {
         'main_formatter': {
-            'format': '[%(levelname)s]: %(message)s '
-                      '(%(asctime)s; %(filename)s:%(lineno)d)',
+            'format': '\033[94m[%(levelname)s]: (%(asctime)s)\033[0m '
+            '%(message)s ',
+            'datefmt': "%Y-%m-%d %H:%M:%S",
+        },
+        'debug_formatter': {
+            'format': '[%(levelname)s]: (%(asctime)s; %(filename)s:%(lineno)d) '
+                       '%(message)s ',
             'datefmt': "%Y-%m-%d %H:%M:%S",
         },
     },
     'handlers': {
-        'mail_admins': {
-            'level': 'ERROR',
-            'filters': ['require_debug_false'],
-            'class': 'django.utils.log.AdminEmailHandler'
-        },
         'console': {
-            'level': 'DEBUG',
-            'filters': ['require_debug_true'],
             'class': 'logging.StreamHandler',
             'formatter': 'main_formatter',
         },
-        'production_file': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs','ltc.log'),
-            'maxBytes': 1024 * 1024 * 5,  # 5 MB
-            'backupCount': 7,
-            'formatter': 'main_formatter',
-            'filters': ['require_debug_false'],
-        },
-        'debug_file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'ltc_debug.log'),
-            'maxBytes': 1024 * 1024 * 5,  # 5 MB
-            'backupCount': 7,
-            'formatter': 'main_formatter',
-            'filters': ['require_debug_true'],
-        },
-        'null': {
-            "class": 'logging.NullHandler',
-        }
+        # 'production_file': {
+        #     'level': 'INFO',
+        #     'class': 'logging.handlers.RotatingFileHandler',
+        #     'filename': os.path.join(BASE_DIR, 'logs','ltc.log'),
+        #     'maxBytes': 1024 * 1024 * 5,  # 5 MB
+        #     'backupCount': 7,
+        #     'formatter': 'main_formatter',
+        # },
+        # 'debug_file': {
+        #     'level': 'DEBUG',
+        #     'class': 'logging.handlers.RotatingFileHandler',
+        #     'filename': os.path.join(BASE_DIR, 'logs', 'ltc_debug.log'),
+        #     'maxBytes': 1024 * 1024 * 5,  # 5 MB
+        #     'backupCount': 7,
+        #     'formatter': 'main_formatter',
+        # },
     },
     'loggers': {
-        'django.request': {
-            'handlers': ['mail_admins', 'console'],
-            'level': 'ERROR',
-            'propagate': True,
-        },
         'django': {
-            'handlers': ['null', ],
-        },
-        'py.warnings': {
-            'handlers': ['null', ],
-        },
-        '': {
-            'handlers': ['console', 'production_file', 'debug_file'],
-            'level': "DEBUG",
+            'handlers': ['console'],
+            'level': "INFO",
         },
     }
 }
